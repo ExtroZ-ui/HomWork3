@@ -39,7 +39,6 @@ class SubjectOut(SubjectBase):
         from_attributes = True
 
 
-
 class StudentBase(BaseModel):
     last_name: str = Field(..., max_length=100)
     first_name: str = Field(..., max_length=100)
@@ -61,7 +60,6 @@ class StudentOut(StudentBase):
 
     class Config:
         from_attributes = True
-
 
 
 class StudentSubjectBase(BaseModel):
@@ -87,7 +85,6 @@ class StudentSubjectOut(StudentSubjectBase):
         from_attributes = True
 
 
-
 class StudentShortOut(BaseModel):
     id: int
     last_name: str
@@ -101,3 +98,28 @@ class StudentShortOut(BaseModel):
 class FacultyAverageOut(BaseModel):
     faculty_name: str
     average_grade: float
+
+
+class UserRegister(BaseModel):
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=4, max_length=100)
+    is_read_only: bool = False
+
+
+class UserLogin(BaseModel):
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=4, max_length=100)
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    is_read_only: bool
+
+    class Config:
+        from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    message: str
+    user_id: int

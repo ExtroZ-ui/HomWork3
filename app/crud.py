@@ -36,6 +36,14 @@ def update_faculty(db: Session, faculty_id: int, faculty_in: schemas.FacultyUpda
     faculty = get_faculty(db, faculty_id)
 
     if faculty_in.name is not None:
+        existing = (
+            db.query(Faculty)
+            .filter(Faculty.name == faculty_in.name, Faculty.id != faculty_id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="Faculty already exists")
+
         faculty.name = faculty_in.name
 
     db.commit()
@@ -78,6 +86,14 @@ def update_subject(db: Session, subject_id: int, subject_in: schemas.SubjectUpda
     subject = get_subject(db, subject_id)
 
     if subject_in.name is not None:
+        existing = (
+            db.query(Subject)
+            .filter(Subject.name == subject_in.name, Subject.id != subject_id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="Subject already exists")
+
         subject.name = subject_in.name
 
     db.commit()
@@ -195,15 +211,28 @@ def update_student_subject(db: Session, ss_id: int, ss_in: schemas.StudentSubjec
 
     data = ss_in.model_dump(exclude_unset=True)
 
-    if "student_id" in data:
-        student = db.query(Student).filter(Student.id == data["student_id"]).first()
-        if not student:
-            raise HTTPException(status_code=404, detail="Student not found")
+    new_student_id = data.get("student_id", ss.student_id)
+    new_subject_id = data.get("subject_id", ss.subject_id)
 
-    if "subject_id" in data:
-        subject = db.query(Subject).filter(Subject.id == data["subject_id"]).first()
-        if not subject:
-            raise HTTPException(status_code=404, detail="Subject not found")
+    student = db.query(Student).filter(Student.id == new_student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    subject = db.query(Subject).filter(Subject.id == new_subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    existing = (
+        db.query(StudentSubject)
+        .filter(
+            StudentSubject.student_id == new_student_id,
+            StudentSubject.subject_id == new_subject_id,
+            StudentSubject.id != ss_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Student already linked to this subject")
 
     for field, value in data.items():
         setattr(ss, field, value)

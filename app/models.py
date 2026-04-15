@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -70,3 +70,35 @@ class StudentSubject(Base):
             f"StudentSubject(id={self.id}, student_id={self.student_id}, "
             f"subject_id={self.subject_id}, grade={self.grade})"
         )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    is_read_only = Column(Boolean, default=False, nullable=False)
+
+    session = relationship(
+        "UserSession",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete",
+    )
+
+    def __repr__(self):
+        return f"User(id={self.id}, username='{self.username}', is_read_only={self.is_read_only})"
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", back_populates="session")
+
+    def __repr__(self):
+        return f"UserSession(id={self.id}, user_id={self.user_id}, is_active={self.is_active})"
