@@ -123,3 +123,14 @@ class UserOut(BaseModel):
 class AuthResponse(BaseModel):
     message: str
     user_id: int
+    
+class CsvImportRequest(BaseModel):
+    csv_path: str = Field(..., min_length=1)
+
+
+class DeleteStudentsRequest(BaseModel):
+    student_ids: list[int] = Field(..., min_length=1)
+
+
+class BackgroundTaskResponse(BaseModel):
+    message: str

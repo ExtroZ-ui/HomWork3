@@ -166,7 +166,38 @@ def delete_student(db: Session, student_id: int):
     db.commit()
     return {"message": "Student deleted"}
 
+def delete_students_by_ids(db: Session, student_ids: list[int]):
+    if not student_ids:
+        raise HTTPException(status_code=400, detail="Список student_ids пуст")
 
+    students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+
+    if not students:
+        return {
+            "message": "Студенты для удаления не найдены",
+            "deleted_students": 0,
+            "deleted_links": 0,
+        }
+
+    deleted_links = (
+        db.query(StudentSubject)
+        .filter(StudentSubject.student_id.in_(student_ids))
+        .delete(synchronize_session=False)
+    )
+
+    deleted_students = (
+        db.query(Student)
+        .filter(Student.id.in_(student_ids))
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+
+    return {
+        "message": "Удаление завершено",
+        "deleted_students": deleted_students,
+        "deleted_links": deleted_links,
+    }
 
 def create_student_subject(db: Session, ss_in: schemas.StudentSubjectCreate) -> StudentSubject:
     student = db.query(Student).filter(Student.id == ss_in.student_id).first()

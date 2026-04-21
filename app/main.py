@@ -1,9 +1,11 @@
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
-from app.db import Base, engine, get_db
+from app.db import Base, engine, get_db, SessionLocal
 from app import crud, schemas
+from app.cache import build_cache_key, clear_cache, get_cache, set_cache
 from app.models import User, UserSession
 from app.security import hash_password, verify_password
 
@@ -38,6 +40,36 @@ def require_write_access(current_user: User = Depends(get_current_user)) -> User
     if current_user.is_read_only:
         raise HTTPException(status_code=403, detail="Read-only user cannot modify data")
     return current_user
+
+def get_or_set_cache(request: Request, data_func, ttl: int = 300):
+    cache_key = build_cache_key("get", str(request.url))
+    cached_data = get_cache(cache_key)
+
+    if cached_data is not None:
+        return cached_data
+
+    data = data_func()
+    encoded_data = jsonable_encoder(data)
+    set_cache(cache_key, encoded_data, ttl=ttl)
+    return encoded_data
+
+
+def import_csv_background_task(csv_path: str):
+    db = SessionLocal()
+    try:
+        crud.import_students_from_csv(db, csv_path)
+        clear_cache()
+    finally:
+        db.close()
+
+
+def delete_students_background_task(student_ids: list[int]):
+    db = SessionLocal()
+    try:
+        crud.delete_students_by_ids(db, student_ids)
+        clear_cache()
+    finally:
+        db.close()
 
 
 @app.get("/")
@@ -119,24 +151,28 @@ def create_faculty(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.create_faculty(db, faculty)
+    result = crud.create_faculty(db, faculty)
+    clear_cache()
+    return result
 
 
 @app.get("/faculties", response_model=list[schemas.FacultyOut])
 def read_faculties(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_faculties(db)
+    return get_or_set_cache(request, lambda: crud.get_faculties(db))
 
 
 @app.get("/faculties/{faculty_id}", response_model=schemas.FacultyOut)
 def read_faculty(
     faculty_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_faculty(db, faculty_id)
+    return get_or_set_cache(request, lambda: crud.get_faculty(db, faculty_id))
 
 
 @app.put("/faculties/{faculty_id}", response_model=schemas.FacultyOut)
@@ -146,7 +182,9 @@ def update_faculty(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.update_faculty(db, faculty_id, faculty)
+    result = crud.update_faculty(db, faculty_id, faculty)
+    clear_cache()
+    return result
 
 
 @app.delete("/faculties/{faculty_id}")
@@ -155,7 +193,9 @@ def delete_faculty(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.delete_faculty(db, faculty_id)
+    result = crud.delete_faculty(db, faculty_id)
+    clear_cache()
+    return result
 
 
 # =========================
@@ -168,24 +208,28 @@ def create_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.create_subject(db, subject)
+    result = crud.create_subject(db, subject)
+    clear_cache()
+    return result
 
 
 @app.get("/subjects", response_model=list[schemas.SubjectOut])
 def read_subjects(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_subjects(db)
+    return get_or_set_cache(request, lambda: crud.get_subjects(db))
 
 
 @app.get("/subjects/{subject_id}", response_model=schemas.SubjectOut)
 def read_subject(
     subject_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_subject(db, subject_id)
+    return get_or_set_cache(request, lambda: crud.get_subject(db, subject_id))
 
 
 @app.put("/subjects/{subject_id}", response_model=schemas.SubjectOut)
@@ -195,7 +239,9 @@ def update_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.update_subject(db, subject_id, subject)
+    result = crud.update_subject(db, subject_id, subject)
+    clear_cache()
+    return result
 
 
 @app.delete("/subjects/{subject_id}")
@@ -204,7 +250,9 @@ def delete_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.delete_subject(db, subject_id)
+    result = crud.delete_subject(db, subject_id)
+    clear_cache()
+    return result
 
 
 # =========================
@@ -217,24 +265,28 @@ def create_student(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.create_student(db, student)
+    result = crud.create_student(db, student)
+    clear_cache()
+    return result
 
 
 @app.get("/students", response_model=list[schemas.StudentOut])
 def read_students(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_students(db)
+    return get_or_set_cache(request, lambda: crud.get_students(db))
 
 
 @app.get("/students/{student_id}", response_model=schemas.StudentOut)
 def read_student(
     student_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_student(db, student_id)
+    return get_or_set_cache(request, lambda: crud.get_student(db, student_id))
 
 
 @app.put("/students/{student_id}", response_model=schemas.StudentOut)
@@ -244,7 +296,9 @@ def update_student(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.update_student(db, student_id, student)
+    result = crud.update_student(db, student_id, student)
+    clear_cache()
+    return result
 
 
 @app.delete("/students/{student_id}")
@@ -253,7 +307,9 @@ def delete_student(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.delete_student(db, student_id)
+    result = crud.delete_student(db, student_id)
+    clear_cache()
+    return result
 
 
 # =========================
@@ -266,24 +322,28 @@ def create_student_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.create_student_subject(db, ss)
+    result = crud.create_student_subject(db, ss)
+    clear_cache()
+    return result
 
 
 @app.get("/student-subjects", response_model=list[schemas.StudentSubjectOut])
 def read_student_subjects(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_student_subjects(db)
+    return get_or_set_cache(request, lambda: crud.get_student_subjects(db))
 
 
 @app.get("/student-subjects/{ss_id}", response_model=schemas.StudentSubjectOut)
 def read_student_subject(
     ss_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_student_subject(db, ss_id)
+    return get_or_set_cache(request, lambda: crud.get_student_subject(db, ss_id))
 
 
 @app.put("/student-subjects/{ss_id}", response_model=schemas.StudentSubjectOut)
@@ -293,7 +353,9 @@ def update_student_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.update_student_subject(db, ss_id, ss)
+    result = crud.update_student_subject(db, ss_id, ss)
+    clear_cache()
+    return result
 
 
 @app.delete("/student-subjects/{ss_id}")
@@ -302,54 +364,74 @@ def delete_student_subject(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access),
 ):
-    return crud.delete_student_subject(db, ss_id)
+    result = crud.delete_student_subject(db, ss_id)
+    clear_cache()
+    return result
 
 
 # =========================
 # IMPORT / REPORTS / EXPORT
 # =========================
 
-@app.post("/import-csv")
-def import_csv(
-    db: Session = Depends(get_db),
+@app.post("/import-csv-background", response_model=schemas.BackgroundTaskResponse)
+def import_csv_background(
+    payload: schemas.CsvImportRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_write_access),
 ):
-    return crud.import_students_from_csv(db, "students.csv")
+    background_tasks.add_task(import_csv_background_task, payload.csv_path)
+    return {"message": f"Фоновая задача импорта запущена для файла: {payload.csv_path}"}
+
+@app.post("/students/delete-background", response_model=schemas.BackgroundTaskResponse)
+def delete_students_background(
+    payload: schemas.DeleteStudentsRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_write_access),
+):
+    background_tasks.add_task(delete_students_background_task, payload.student_ids)
+    return {"message": "Фоновая задача удаления студентов запущена"}
 
 
 @app.get("/reports/students/by-faculty/{faculty_name}", response_model=list[schemas.StudentOut])
 def students_by_faculty(
     faculty_name: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_students_by_faculty_name(db, faculty_name)
+    return get_or_set_cache(request, lambda: crud.get_students_by_faculty_name(db, faculty_name))
 
 
 @app.get("/reports/subjects/unique", response_model=list[schemas.SubjectOut])
 def unique_subjects(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_unique_subjects(db)
+    return get_or_set_cache(request, lambda: crud.get_unique_subjects(db))
 
 
 @app.get("/reports/students/by-subject-low-grade/{subject_name}", response_model=list[schemas.StudentOut])
 def students_by_subject_low_grade(
     subject_name: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_students_by_subject_with_low_grade(db, subject_name, 30)
+    return get_or_set_cache(
+        request,
+        lambda: crud.get_students_by_subject_with_low_grade(db, subject_name, 30)
+    )
 
 
 @app.get("/reports/faculty-average/{faculty_name}", response_model=schemas.FacultyAverageOut)
 def faculty_average(
     faculty_name: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.get_faculty_average_grade(db, faculty_name)
+    return get_or_set_cache(request, lambda: crud.get_faculty_average_grade(db, faculty_name))
 
 
 @app.get("/export-csv")
